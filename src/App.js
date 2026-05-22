@@ -5,15 +5,18 @@ const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Minimal Supabase client
+// Supabase client with auth support
 const supabase = {
+  _token: null,
+
   async query(table, method = "GET", body = null, filter = "") {
+    const token = supabase._token || SUPABASE_ANON_KEY;
     const url = `${SUPABASE_URL}/rest/v1/${table}${filter}`;
     const res = await fetch(url, {
       method,
       headers: {
         apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         Prefer: method === "POST" ? "return=representation" : "",
       },
@@ -22,11 +25,51 @@ const supabase = {
     if (!res.ok) throw new Error(await res.text());
     return method === "DELETE" ? null : res.json();
   },
+
   from: (table) => ({
     select: (filter = "") => supabase.query(table, "GET", null, `?select=*${filter}&order=created_at.desc`),
     insert: (data) => supabase.query(table, "POST", data),
     update: (data, filter) => supabase.query(table, "PATCH", data, filter),
   }),
+
+  auth: {
+    async signUp(email, password) {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      return res.json();
+    },
+    async signIn(email, password) {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (data.access_token) {
+        supabase._token = data.access_token;
+        localStorage.setItem("sb_token", data.access_token);
+        localStorage.setItem("sb_user", JSON.stringify({ id: data.user?.id, email: data.user?.email }));
+      }
+      return data;
+    },
+    signOut() {
+      supabase._token = null;
+      localStorage.removeItem("sb_token");
+      localStorage.removeItem("sb_user");
+    },
+    getSession() {
+      const token = localStorage.getItem("sb_token");
+      const user = localStorage.getItem("sb_user");
+      if (token && user) {
+        supabase._token = token;
+        return { token, user: JSON.parse(user) };
+      }
+      return null;
+    },
+  },
 };
 
 // Claude AI call — goes through Vercel API route
@@ -204,14 +247,115 @@ const STRATEGIES = {
   },
 };
 
+// ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
+function AuthScreen({ onAuth }) {
+  const [mode, setMode] = useState("login"); // "login" | "signup"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
+
+  async function submit() {
+    if (!email || !password) return setError("Enter email and password.");
+    setLoading(true);
+    setError("");
+    setMsg("");
+    if (mode === "signup") {
+      const data = await supabase.auth.signUp(email, password);
+      if (data.error) {
+        setError(data.error.message || "Signup failed.");
+      } else {
+        setMsg("Check your email to confirm your account, then log in.");
+        setMode("login");
+      }
+    } else {
+      const data = await supabase.auth.signIn(email, password);
+      if (data.error) {
+        setError(data.error.message || "Login failed.");
+      } else if (data.access_token) {
+        onAuth({ id: data.user?.id, email: data.user?.email });
+      } else {
+        setError("Login failed. Check your credentials.");
+      }
+    }
+    setLoading(false);
+  }
+
+  return (
+    <>
+      <style>{css}</style>
+      <div className="app">
+        <div className="header">
+          <div className="logo">TRADE//LOG</div>
+        </div>
+        <div style={{ padding: "40px 16px 0" }}>
+          <div className="page-title" style={{ fontSize: 18, marginBottom: 8 }}>
+            {mode === "login" ? "Welcome back" : "Create account"}
+          </div>
+          <p style={{ color: "var(--text2)", fontSize: 13, marginBottom: 28 }}>
+            {mode === "login" ? "Log in to your journal" : "Start tracking your trades"}
+          </p>
+          <div className="card" style={{ margin: 0 }}>
+            <div className="form">
+              <div className="field full">
+                <label>Email</label>
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && submit()}
+                />
+              </div>
+              <div className="field full">
+                <label>Password</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && submit()}
+                />
+              </div>
+              {error && <div style={{ color: "var(--red)", fontSize: 13 }}>{error}</div>}
+              {msg && <div style={{ color: "var(--green)", fontSize: 13 }}>{msg}</div>}
+              <button className="btn btn-primary" style={{ width: "100%" }} onClick={submit} disabled={loading}>
+                {loading ? "Loading..." : mode === "login" ? "Log in" : "Sign up"}
+              </button>
+            </div>
+          </div>
+          <div style={{ textAlign: "center", marginTop: 20, color: "var(--text2)", fontSize: 13 }}>
+            {mode === "login" ? (
+              <>No account? <button onClick={() => { setMode("signup"); setError(""); }} style={{ background: "none", border: "none", color: "var(--green)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>Sign up</button></>
+            ) : (
+              <>Already have one? <button onClick={() => { setMode("login"); setError(""); }} style={{ background: "none", border: "none", color: "var(--green)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>Log in</button></>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 export default function TradeJournal() {
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [screen, setScreen] = useState("dashboard");
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
 
-  useEffect(() => { loadTrades(); }, []);
+  useEffect(() => {
+    const session = supabase.auth.getSession();
+    if (session) setUser(session.user);
+    setAuthChecked(true);
+  }, []);
+
+  useEffect(() => {
+    if (user) loadTrades();
+  }, [user]);
 
   async function loadTrades() {
     try {
@@ -221,6 +365,16 @@ export default function TradeJournal() {
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }
+
+  function handleSignOut() {
+    supabase.auth.signOut();
+    setUser(null);
+    setTrades([]);
+    setScreen("dashboard");
+  }
+
+  if (!authChecked) return null;
+  if (!user) return <AuthScreen onAuth={(u) => setUser(u)} />;
 
   const closedTrades = trades.filter(t => t.status === "closed");
   const openTrades = trades.filter(t => t.status === "open");
@@ -240,6 +394,7 @@ export default function TradeJournal() {
           <div className="header-actions">
             <button className={`tab-btn ${screen === "dashboard" ? "active" : ""}`} onClick={() => setScreen("dashboard")}>Journal</button>
             <button className={`tab-btn ${screen === "review" ? "active" : ""}`} onClick={() => setScreen("review")}>Review</button>
+            <button className="tab-btn" onClick={handleSignOut} title={user.email}>Sign out</button>
           </div>
         </div>
 
@@ -252,7 +407,7 @@ export default function TradeJournal() {
           />
         )}
         {screen === "log" && (
-          <LogTrade onSave={async () => { await loadTrades(); setScreen("dashboard"); }} onBack={() => setScreen("dashboard")} />
+          <LogTrade userId={user.id} onSave={async () => { await loadTrades(); setScreen("dashboard"); }} onBack={() => setScreen("dashboard")} />
         )}
         {screen === "detail" && selected && (
           <TradeDetail trade={selected} onBack={() => { setSelected(null); setScreen("dashboard"); }} onClose={async () => { await loadTrades(); setSelected(null); setScreen("dashboard"); }} />
@@ -329,7 +484,7 @@ function Dashboard({ trades, openTrades, closedTrades, adherenceRate, winRate, l
 }
 
 // ─── LOG TRADE ────────────────────────────────────────────────────────────────
-function LogTrade({ onSave, onBack }) {
+function LogTrade({ userId, onSave, onBack }) {
   const [form, setForm] = useState({ asset: "", direction: "Long", entry_price: "", target_price: "", stop_loss: "", position_size: "", thesis: "", exit_conditions: "" });
   const [strategy, setStrategy] = useState("");
   const [claudeQ, setClaudeQ] = useState("");
@@ -372,6 +527,7 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
     try {
       await supabase.from("trades").insert({
         ...form,
+        user_id: userId,
         entry_price: parseFloat(form.entry_price) || null,
         target_price: parseFloat(form.target_price) || null,
         stop_loss: parseFloat(form.stop_loss) || null,
