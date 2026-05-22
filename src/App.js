@@ -247,6 +247,96 @@ const STRATEGIES = {
   },
 };
 
+// ─── PAYWALL SCREEN ──────────────────────────────────────────────────────────
+function PaywallScreen({ user, onSubscribed }) {
+  const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  async function goToCheckout() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/lemon-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, email: user.email }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert("Could not create checkout. Try again.");
+      }
+    } catch (err) {
+      alert("Error: " + err.message);
+    }
+    setLoading(false);
+  }
+
+  async function checkSubscription() {
+    setChecking(true);
+    const token = localStorage.getItem("sb_token");
+    try {
+      const res = await fetch(
+        `${process.env.REACT_APP_SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=subscription_status`,
+        {
+          headers: {
+            apikey: process.env.REACT_APP_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      const data = await res.json();
+      if (data?.[0]?.subscription_status === "active") {
+        onSubscribed();
+      } else {
+        alert("Subscription not found yet. If you just paid, wait a moment and try again.");
+      }
+    } catch (err) {
+      alert("Error checking subscription.");
+    }
+    setChecking(false);
+  }
+
+  return (
+    <>
+      <style>{css}</style>
+      <div className="app">
+        <div className="header">
+          <div className="logo">TRADE//LOG</div>
+          <button className="tab-btn" onClick={() => { supabase.auth.signOut(); window.location.reload(); }}>Sign out</button>
+        </div>
+        <div style={{ padding: "40px 16px 0", textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>📈</div>
+          <div className="page-title" style={{ textAlign: "center" }}>Start your free trial</div>
+          <p style={{ color: "var(--text2)", fontSize: 14, lineHeight: 1.7, marginBottom: 32, padding: "0 16px" }}>
+            Track your trades, get AI feedback on every entry, and spot patterns in your trading behavior.
+          </p>
+          <div className="card" style={{ margin: "0 0 16px", textAlign: "left" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>Trade Journal Pro</div>
+                <div style={{ color: "var(--text2)", fontSize: 13 }}>Monthly subscription</div>
+              </div>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 22, fontWeight: 700, color: "var(--green)" }}>$5<span style={{ fontSize: 13, color: "var(--text2)" }}>/mo</span></div>
+            </div>
+            {["AI feedback on every trade", "Pre-trade challenge questions", "Pattern analysis across your journal", "Unlimited trade logging"].map(f => (
+              <div key={f} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, fontSize: 13, color: "var(--text2)" }}>
+                <span style={{ color: "var(--green)" }}>✓</span> {f}
+              </div>
+            ))}
+          </div>
+          <button className="cta" onClick={goToCheckout} disabled={loading} style={{ width: "100%", margin: "0 0 12px" }}>
+            {loading ? "Loading..." : "Subscribe for $5/month →"}
+          </button>
+          <button className="tab-btn" onClick={checkSubscription} disabled={checking} style={{ width: "100%", padding: "10px" }}>
+            {checking ? "Checking..." : "I already paid — check my subscription"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode, setMode] = useState("login"); // "login" | "signup"
@@ -342,6 +432,8 @@ function AuthScreen({ onAuth }) {
 export default function TradeJournal() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [subChecked, setSubChecked] = useState(false);
   const [screen, setScreen] = useState("dashboard");
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -352,6 +444,38 @@ export default function TradeJournal() {
     if (session) setUser(session.user);
     setAuthChecked(true);
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      checkSubscription();
+    }
+  }, [user]);
+
+  async function checkSubscription() {
+    // Check if returned from Lemon Squeezy with ?subscribed=true
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("subscribed") === "true") {
+      window.history.replaceState({}, "", "/");
+    }
+    try {
+      const token = localStorage.getItem("sb_token");
+      const res = await fetch(
+        `${process.env.REACT_APP_SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=subscription_status`,
+        {
+          headers: {
+            apikey: process.env.REACT_APP_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      const data = await res.json();
+      setSubscribed(data?.[0]?.subscription_status === "active");
+    } catch (e) {
+      console.error("Sub check error:", e);
+    }
+    setSubChecked(true);
+    loadTrades();
+  }
 
   useEffect(() => {
     if (user) loadTrades();
@@ -375,6 +499,8 @@ export default function TradeJournal() {
 
   if (!authChecked) return null;
   if (!user) return <AuthScreen onAuth={(u) => setUser(u)} />;
+  if (!subChecked) return null;
+  if (!subscribed) return <PaywallScreen user={user} onSubscribed={() => setSubscribed(true)} />;
 
   const closedTrades = trades.filter(t => t.status === "closed");
   const openTrades = trades.filter(t => t.status === "open");
