@@ -29,10 +29,10 @@ const supabase = {
   }),
 };
 
-// Claude AI call — goes through local backend server
+// Claude AI call — goes through Vercel API route
 async function askClaude(prompt) {
   try {
-    const res = await fetch("http://localhost:4000/api/claude", {
+    const res = await fetch("/api/claude", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
