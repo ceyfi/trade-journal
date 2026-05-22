@@ -449,7 +449,7 @@ export default function TradeJournal() {
     if (user) {
       checkSubscription();
     }
-  }, [user]);
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function checkSubscription() {
     // Check if returned from Lemon Squeezy with ?subscribed=true
