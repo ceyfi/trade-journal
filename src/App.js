@@ -61,6 +61,26 @@ const supabase = {
       localStorage.removeItem("sb_token");
       localStorage.removeItem("sb_user");
     },
+    async recover(email) {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      return res.json();
+    },
+    async updatePassword(token, newPassword) {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      return res.json();
+    },
     getSession() {
       const token = localStorage.getItem("sb_token");
       const user = localStorage.getItem("sb_user");
@@ -374,26 +394,52 @@ function PaywallScreen({ user, tradesCount, onSubscribed, onBack }) {
 }
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
-function AuthScreen({ onAuth }) {
-  const [mode, setMode] = useState("login"); // "login" | "signup"
+function AuthScreen({ onAuth, initialMode }) {
+  const [mode, setMode] = useState(initialMode || "login"); // "login" | "signup" | "forgot" | "reset"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
 
+  function go(m) { setMode(m); setError(""); setMsg(""); }
+
   async function submit() {
+    setError(""); setMsg("");
+    if (mode === "forgot") {
+      if (!email) return setError("Enter your email.");
+      setLoading(true);
+      await supabase.auth.recover(email);
+      setMsg("If that email exists, a reset link has been sent. Check your inbox.");
+      setLoading(false);
+      return;
+    }
+    if (mode === "reset") {
+      if (!password || !password2) return setError("Enter and confirm your new password.");
+      if (password !== password2) return setError("Passwords don't match.");
+      setLoading(true);
+      const token = new URLSearchParams(window.location.hash.slice(1)).get("access_token");
+      const data = await supabase.auth.updatePassword(token, password);
+      if (data.error) {
+        setError(data.error.message || "Reset failed.");
+      } else {
+        setMsg("Password updated! You can now log in.");
+        window.history.replaceState({}, "", "/");
+        go("login");
+      }
+      setLoading(false);
+      return;
+    }
     if (!email || !password) return setError("Enter email and password.");
     setLoading(true);
-    setError("");
-    setMsg("");
     if (mode === "signup") {
       const data = await supabase.auth.signUp(email, password);
       if (data.error) {
         setError(data.error.message || "Signup failed.");
       } else {
         setMsg("Check your email to confirm your account, then log in.");
-        setMode("login");
+        go("login");
       }
     } else {
       const data = await supabase.auth.signIn(email, password);
@@ -408,54 +454,77 @@ function AuthScreen({ onAuth }) {
     setLoading(false);
   }
 
+  const linkBtn = { background: "none", border: "none", color: "var(--green)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 };
+
   return (
     <>
       <style>{css}</style>
       <div className="app">
         <div className="header">
           <div className="logo">TRADE//LOG</div>
+          {(mode === "forgot" || mode === "reset") && (
+            <button className="tab-btn" onClick={() => go("login")}>← Back</button>
+          )}
         </div>
         <div style={{ padding: "40px 16px 0" }}>
           <div className="page-title" style={{ fontSize: 18, marginBottom: 8 }}>
-            {mode === "login" ? "Welcome back" : "Create account"}
+            {mode === "login" && "Welcome back"}
+            {mode === "signup" && "Create account"}
+            {mode === "forgot" && "Reset password"}
+            {mode === "reset" && "Set new password"}
           </div>
           <p style={{ color: "var(--text2)", fontSize: 13, marginBottom: 28 }}>
-            {mode === "login" ? "Log in to your journal" : "Start tracking your trades"}
+            {mode === "login" && "Log in to your journal"}
+            {mode === "signup" && "Start tracking your trades"}
+            {mode === "forgot" && "We'll send a reset link to your email"}
+            {mode === "reset" && "Choose a new password for your account"}
           </p>
           <div className="card" style={{ margin: 0 }}>
             <div className="form">
-              <div className="field full">
-                <label>Email</label>
-                <input
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && submit()}
-                />
-              </div>
-              <div className="field full">
-                <label>Password</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && submit()}
-                />
-              </div>
+              {(mode === "login" || mode === "signup" || mode === "forgot") && (
+                <div className="field full">
+                  <label>Email</label>
+                  <input type="email" placeholder="you@example.com" value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()} />
+                </div>
+              )}
+              {(mode === "login" || mode === "signup") && (
+                <div className="field full">
+                  <label>Password</label>
+                  <input type="password" placeholder="••••••••" value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()} />
+                </div>
+              )}
+              {mode === "reset" && (<>
+                <div className="field full">
+                  <label>New password</label>
+                  <input type="password" placeholder="••••••••" value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()} />
+                </div>
+                <div className="field full">
+                  <label>Confirm password</label>
+                  <input type="password" placeholder="••••••••" value={password2}
+                    onChange={e => setPassword2(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()} />
+                </div>
+              </>)}
               {error && <div style={{ color: "var(--red)", fontSize: 13 }}>{error}</div>}
               {msg && <div style={{ color: "var(--green)", fontSize: 13 }}>{msg}</div>}
               <button className="btn btn-primary" style={{ width: "100%" }} onClick={submit} disabled={loading}>
-                {loading ? "Loading..." : mode === "login" ? "Log in" : "Sign up"}
+                {loading ? "Loading..." : mode === "login" ? "Log in" : mode === "signup" ? "Sign up" : mode === "forgot" ? "Send reset link" : "Set new password"}
               </button>
             </div>
           </div>
-          <div style={{ textAlign: "center", marginTop: 20, color: "var(--text2)", fontSize: 13 }}>
-            {mode === "login" ? (
-              <>No account? <button onClick={() => { setMode("signup"); setError(""); }} style={{ background: "none", border: "none", color: "var(--green)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>Sign up</button></>
-            ) : (
-              <>Already have one? <button onClick={() => { setMode("login"); setError(""); }} style={{ background: "none", border: "none", color: "var(--green)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>Log in</button></>
+          <div style={{ textAlign: "center", marginTop: 20, color: "var(--text2)", fontSize: 13, display: "flex", flexDirection: "column", gap: 10 }}>
+            {mode === "login" && (<>
+              <span>No account? <button onClick={() => go("signup")} style={linkBtn}>Sign up</button></span>
+              <span><button onClick={() => go("forgot")} style={{ ...linkBtn, color: "var(--text2)" }}>Forgot password?</button></span>
+            </>)}
+            {mode === "signup" && (
+              <span>Already have one? <button onClick={() => go("login")} style={linkBtn}>Log in</button></span>
             )}
           </div>
         </div>
@@ -475,6 +544,12 @@ export default function TradeJournal() {
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
+    // Detektuj password reset link iz emaila (#access_token=...&type=recovery)
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    if (hash.get("type") === "recovery") {
+      setAuthChecked(true);
+      return; // AuthScreen će prikazati reset formu
+    }
     const session = supabase.auth.getSession();
     if (session) setUser(session.user);
     setAuthChecked(true);
@@ -532,7 +607,10 @@ export default function TradeJournal() {
   }
 
   if (!authChecked) return null;
-  if (!user) return <AuthScreen onAuth={(u) => setUser(u)} />;
+  if (!user) {
+    const isReset = new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
+    return <AuthScreen onAuth={(u) => setUser(u)} initialMode={isReset ? "reset" : "login"} />;
+  }
 
   const atLimit = !subscribed && trades.length >= FREE_LIMIT;
 
