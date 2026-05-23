@@ -315,10 +315,12 @@ function PaywallScreen({ user, tradesCount, onSubscribed, onBack }) {
               Upgrade
             </div>
             <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 26, fontWeight: 700, color: "var(--text)", lineHeight: 1.25, marginBottom: 10 }}>
-              You've reached<br />the free limit
+              {tradesCount >= FREE_LIMIT ? <>You've reached<br />the free limit</> : <>Unlock the<br />full journal</>}
             </div>
             <div style={{ fontSize: 15, color: "var(--text2)", lineHeight: 1.7 }}>
-              You've logged all {FREE_LIMIT} free trades. Upgrade to Pro to keep going.
+              {tradesCount >= FREE_LIMIT
+                ? `You've logged all ${FREE_LIMIT} free trades. Upgrade to Pro to keep going.`
+                : `You're on ${tradesCount} of ${FREE_LIMIT} free trades. Here's what you get when you upgrade.`}
             </div>
           </div>
 
@@ -554,9 +556,9 @@ export default function TradeJournal() {
             <button className={`tab-btn ${screen === "review" ? "active" : ""}`} onClick={() => setScreen("review")}>Review</button>
             {!subscribed && (
               <span
-                onClick={() => atLimit && setScreen("paywall")}
-                title={atLimit ? "Upgrade to Pro" : `${FREE_LIMIT - trades.length} free trades remaining`}
-                style={{ fontSize: 12, color: atLimit ? "var(--red, #ff4d4d)" : "var(--text2)", cursor: atLimit ? "pointer" : "default", padding: "4px 8px", border: "1px solid currentColor", borderRadius: 4 }}
+                onClick={() => setScreen("paywall")}
+                title="See what's included in Pro"
+                style={{ fontSize: 12, color: atLimit ? "var(--red, #ff4d4d)" : "var(--text2)", cursor: "pointer", padding: "4px 8px", border: "1px solid currentColor", borderRadius: 4 }}
               >
                 {trades.length}/{FREE_LIMIT} free
               </span>
