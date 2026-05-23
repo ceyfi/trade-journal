@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 // ─── CONFIGURATION ────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+const FREE_LIMIT = 5; // broj besplatnih trejdova
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Supabase client with auth support
@@ -248,7 +249,7 @@ const STRATEGIES = {
 };
 
 // ─── PAYWALL SCREEN ──────────────────────────────────────────────────────────
-function PaywallScreen({ user, onSubscribed }) {
+function PaywallScreen({ user, tradesCount, onSubscribed, onBack }) {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -303,13 +304,13 @@ function PaywallScreen({ user, onSubscribed }) {
       <div className="app">
         <div className="header">
           <div className="logo">TRADE//LOG</div>
-          <button className="tab-btn" onClick={() => { supabase.auth.signOut(); window.location.reload(); }}>Sign out</button>
+          {onBack && <button className="tab-btn" onClick={onBack}>← Back</button>}
         </div>
         <div style={{ padding: "40px 16px 0", textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>📈</div>
-          <div className="page-title" style={{ textAlign: "center" }}>Start your free trial</div>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+          <div className="page-title" style={{ textAlign: "center" }}>You've used all {FREE_LIMIT} free trades</div>
           <p style={{ color: "var(--text2)", fontSize: 14, lineHeight: 1.7, marginBottom: 32, padding: "0 16px" }}>
-            Track your trades, get AI feedback on every entry, and spot patterns in your trading behavior.
+            Hope the app has been useful so far! To keep logging trades and getting AI feedback, upgrade to Pro — just $5/month.
           </p>
           <div className="card" style={{ margin: "0 0 16px", textAlign: "left" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -319,14 +320,14 @@ function PaywallScreen({ user, onSubscribed }) {
               </div>
               <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 22, fontWeight: 700, color: "var(--green)" }}>$5<span style={{ fontSize: 13, color: "var(--text2)" }}>/mo</span></div>
             </div>
-            {["AI feedback on every trade", "Pre-trade challenge questions", "Pattern analysis across your journal", "Unlimited trade logging"].map(f => (
+            {["Unlimited trade logging", "AI feedback on every trade", "Pre-trade challenge questions", "Pattern analysis across your journal"].map(f => (
               <div key={f} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, fontSize: 13, color: "var(--text2)" }}>
                 <span style={{ color: "var(--green)" }}>✓</span> {f}
               </div>
             ))}
           </div>
           <button className="cta" onClick={goToCheckout} disabled={loading} style={{ width: "100%", margin: "0 0 12px" }}>
-            {loading ? "Loading..." : "Subscribe for $5/month →"}
+            {loading ? "Loading..." : "Upgrade to Pro — $5/month →"}
           </button>
           <button className="tab-btn" onClick={checkSubscription} disabled={checking} style={{ width: "100%", padding: "10px" }}>
             {checking ? "Checking..." : "I already paid — check my subscription"}
@@ -499,8 +500,8 @@ export default function TradeJournal() {
 
   if (!authChecked) return null;
   if (!user) return <AuthScreen onAuth={(u) => setUser(u)} />;
-  if (!subChecked) return null;
-  if (!subscribed) return <PaywallScreen user={user} onSubscribed={() => setSubscribed(true)} />;
+
+  const atLimit = !subscribed && trades.length >= FREE_LIMIT;
 
   const closedTrades = trades.filter(t => t.status === "closed");
   const openTrades = trades.filter(t => t.status === "open");
@@ -520,6 +521,15 @@ export default function TradeJournal() {
           <div className="header-actions">
             <button className={`tab-btn ${screen === "dashboard" ? "active" : ""}`} onClick={() => setScreen("dashboard")}>Journal</button>
             <button className={`tab-btn ${screen === "review" ? "active" : ""}`} onClick={() => setScreen("review")}>Review</button>
+            {!subscribed && (
+              <span
+                onClick={() => setScreen("paywall")}
+                title="Upgrade to Pro"
+                style={{ fontSize: 12, color: trades.length >= FREE_LIMIT ? "var(--red, #ff4d4d)" : "var(--text2)", cursor: "pointer", padding: "4px 8px", border: "1px solid currentColor", borderRadius: 4 }}
+              >
+                {trades.length}/{FREE_LIMIT} free
+              </span>
+            )}
             <button className="tab-btn" onClick={handleSignOut} title={user.email}>Sign out</button>
           </div>
         </div>
@@ -528,12 +538,15 @@ export default function TradeJournal() {
           <Dashboard
             trades={trades} openTrades={openTrades} closedTrades={closedTrades}
             adherenceRate={adherenceRate} winRate={winRate} loading={loading}
-            onNew={() => setScreen("log")}
+            onNew={() => atLimit ? setScreen("paywall") : setScreen("log")}
             onSelect={(t) => { setSelected(t); setScreen("detail"); }}
           />
         )}
         {screen === "log" && (
           <LogTrade userId={user.id} onSave={async () => { await loadTrades(); setScreen("dashboard"); }} onBack={() => setScreen("dashboard")} />
+        )}
+        {screen === "paywall" && (
+          <PaywallScreen user={user} tradesCount={trades.length} onSubscribed={() => { setSubscribed(true); setScreen("log"); }} onBack={() => setScreen("dashboard")} />
         )}
         {screen === "detail" && selected && (
           <TradeDetail trade={selected} onBack={() => { setSelected(null); setScreen("dashboard"); }} onClose={async () => { await loadTrades(); setSelected(null); setScreen("dashboard"); }} />
