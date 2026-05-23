@@ -133,9 +133,9 @@ const css = `
   .card-sm { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
 
   .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 0 16px 16px; }
-  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 16px 14px; }
-  .metric-label { font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; font-family: 'Space Mono', monospace; }
-  .metric-value { font-size: 24px; font-weight: 700; line-height: 1; }
+  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 18px 14px; }
+  .metric-label { font-size: 12px; color: var(--text2); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 10px; font-family: 'Syne', sans-serif; font-weight: 600; }
+  .metric-value { font-size: 28px; font-weight: 700; line-height: 1; font-family: 'Space Mono', monospace; }
   .metric-value.green { color: var(--green); }
   .metric-value.amber { color: var(--amber); }
   .metric-value.neutral { color: var(--text); }
@@ -306,32 +306,65 @@ function PaywallScreen({ user, tradesCount, onSubscribed, onBack }) {
           <div className="logo">TRADE//LOG</div>
           {onBack && <button className="tab-btn" onClick={onBack}>← Back</button>}
         </div>
-        <div style={{ padding: "40px 16px 0", textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
-          <div className="page-title" style={{ textAlign: "center" }}>You've used all {FREE_LIMIT} free trades</div>
-          <p style={{ color: "var(--text2)", fontSize: 14, lineHeight: 1.7, marginBottom: 32, padding: "0 16px" }}>
-            Hope the app has been useful so far! To keep logging trades and getting AI feedback, upgrade to Pro — just $5/month.
-          </p>
-          <div className="card" style={{ margin: "0 0 16px", textAlign: "left" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>Trade Journal Pro</div>
-                <div style={{ color: "var(--text2)", fontSize: 13 }}>Monthly subscription</div>
-              </div>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 22, fontWeight: 700, color: "var(--green)" }}>$5<span style={{ fontSize: 13, color: "var(--text2)" }}>/mo</span></div>
+
+        <div style={{ padding: "32px 16px 0" }}>
+
+          {/* Naslov */}
+          <div style={{ marginBottom: 28, padding: "0 4px" }}>
+            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "var(--text3)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>
+              Upgrade
             </div>
-            {["Unlimited trade logging", "AI feedback on every trade", "Pre-trade challenge questions", "Pattern analysis across your journal"].map(f => (
-              <div key={f} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, fontSize: 13, color: "var(--text2)" }}>
-                <span style={{ color: "var(--green)" }}>✓</span> {f}
+            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 26, fontWeight: 700, color: "var(--text)", lineHeight: 1.25, marginBottom: 10 }}>
+              You've reached<br />the free limit
+            </div>
+            <div style={{ fontSize: 15, color: "var(--text2)", lineHeight: 1.7 }}>
+              You've logged all {FREE_LIMIT} free trades. Upgrade to Pro to keep going.
+            </div>
+          </div>
+
+          {/* Kartica s cijenom */}
+          <div className="card" style={{ marginBottom: 12, marginLeft: 0, marginRight: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
+                  TRADE//LOG PRO
+                </div>
+                <div style={{ fontSize: 13, color: "var(--text3)" }}>Monthly subscription</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 28, fontWeight: 700, color: "var(--green)", lineHeight: 1 }}>
+                  $5
+                </div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "var(--text3)" }}>/month</div>
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: "var(--border)", marginBottom: 18 }} />
+
+            {[
+              ["Unlimited trade logging", "Log as many trades as you want"],
+              ["AI feedback on every entry", "Claude analyses each trade before you submit"],
+              ["Pre-trade challenge questions", "Stay disciplined with guided reflection"],
+              ["Pattern analysis", "Spot what's working across your journal"],
+            ].map(([title, desc]) => (
+              <div key={title} style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 13, color: "var(--green)", marginTop: 1, flexShrink: 0 }}>✓</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>{title}</div>
+                  <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5 }}>{desc}</div>
+                </div>
               </div>
             ))}
           </div>
-          <button className="cta" onClick={goToCheckout} disabled={loading} style={{ width: "100%", margin: "0 0 12px" }}>
+
+          {/* Dugmad */}
+          <button className="cta" onClick={goToCheckout} disabled={loading} style={{ marginLeft: 0, marginRight: 0, width: "100%", marginBottom: 10 }}>
             {loading ? "Loading..." : "Upgrade to Pro — $5/month →"}
           </button>
-          <button className="tab-btn" onClick={checkSubscription} disabled={checking} style={{ width: "100%", padding: "10px" }}>
+          <button className="tab-btn" onClick={checkSubscription} disabled={checking} style={{ width: "100%", padding: "12px", fontSize: 13 }}>
             {checking ? "Checking..." : "I already paid — check my subscription"}
           </button>
+
         </div>
       </div>
     </>
