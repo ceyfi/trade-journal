@@ -434,7 +434,6 @@ export default function TradeJournal() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
-  const [subChecked, setSubChecked] = useState(false);
   const [screen, setScreen] = useState("dashboard");
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -474,7 +473,6 @@ export default function TradeJournal() {
     } catch (e) {
       console.error("Sub check error:", e);
     }
-    setSubChecked(true);
     loadTrades();
   }
 
