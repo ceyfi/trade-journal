@@ -521,9 +521,9 @@ export default function TradeJournal() {
             <button className={`tab-btn ${screen === "review" ? "active" : ""}`} onClick={() => setScreen("review")}>Review</button>
             {!subscribed && (
               <span
-                onClick={() => setScreen("paywall")}
-                title="Upgrade to Pro"
-                style={{ fontSize: 12, color: trades.length >= FREE_LIMIT ? "var(--red, #ff4d4d)" : "var(--text2)", cursor: "pointer", padding: "4px 8px", border: "1px solid currentColor", borderRadius: 4 }}
+                onClick={() => atLimit && setScreen("paywall")}
+                title={atLimit ? "Upgrade to Pro" : `${FREE_LIMIT - trades.length} free trades remaining`}
+                style={{ fontSize: 12, color: atLimit ? "var(--red, #ff4d4d)" : "var(--text2)", cursor: atLimit ? "pointer" : "default", padding: "4px 8px", border: "1px solid currentColor", borderRadius: 4 }}
               >
                 {trades.length}/{FREE_LIMIT} free
               </span>
