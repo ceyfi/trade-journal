@@ -25,24 +25,38 @@
 - Polja u profiles: `subscription_status`, `lemon_customer_id`, `lemon_subscription_id`
 - Webhook obrađuje: `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_expired`
 
-### Freemium model (zadnje urađeno)
+### Freemium model
 - Prvih 5 trejdova besplatno, od 6. paywall
-- Counter u headeru: "X/5 free" (postaje crven na limitu)
+- Counter u headeru: "X/5 free" (postaje crven na limitu, uvijek klikabilan)
 - `FREE_LIMIT = 5` konstanta na vrhu App.js — lako promijeniti
-- PaywallScreen se prikazuje samo kad korisnik pokuša logirati 6. trejd
-- Tekst: "You've used all 5 free trades" + dugme za $5/month
+- Klik na counter pokazuje paywall sa različitim tekstom zavisno jesi li na limitu ili ne
+- PaywallScreen redesajniran da prati dizajn sistem app-a (Space Mono font, zelena cijena, feature opisi)
 
-## Poznati problemi / napomene
-- `.env` fajl nije u `.gitignore` — treba provjeriti da se ne commituje API ključevi
+### Sigurnost
+- `.env` uklonjen iz git trackinga, dodan u `.gitignore`
+- Anthropic API ključ rotiran (novi ključ postavljen lokalno i na Vercelu)
+
+### UI poboljšanja
+- Dashboard metric labele: veće (12px), čitljivija boja, Syne font — vrijednosti u Space Mono
+- PaywallScreen: potpuno redesajniran da prati dizajn sistem
+
+### Password reset (zadnje urađeno)
+- "Forgot password?" link na login ekranu
+- Ekran za unos emaila → Supabase šalje reset link
+- Kad korisnik klikne link iz maila, app detektuje `#type=recovery` u URL-u i prikazuje formu za novu lozinku
+- Nakon promjene lozinke redirect na login
+
+## Poznate napomene
 - LemonSqueezy trial period nije konfigurisan (za sada freemium, bez triala)
 - `subscription_status = 'on_trial'` nije obrađen u webhook handleru (ne potrebno sada)
+- Email resetlozinke dolazi od Supabase adrese — kad bude zvanično, podesiti custom SMTP u Supabase → Project Settings → Authentication → SMTP Settings (preporučen Resend.com, besplatan plan)
+- Ručno postavljanje pretplate u Supabase: `UPDATE profiles SET subscription_status = 'active' WHERE id = 'uuid';`
 
 ## Sljedeće ideje (nisu implementirane)
+- [ ] Poboljšati unos trejda (Marko ima konkretne napomene — pitati na početku sljedeće sesije)
+- [ ] Pregledati sve ekrane i ujednačiti font veličine i stilove
 - [ ] Landing page sa screenshotima app-a
-- [ ] Ručno postavljanje pretplate u Supabase: `UPDATE profiles SET subscription_status = 'active' WHERE id = 'uuid';`
 - [ ] Poboljšati onboarding (prvi ekran kad se neko uloguje)
-- [ ] Email notifikacije
-- [ ] Mobile optimizacija
 
 ## Kako raditi na projektu
 1. Otvori Cowork i učitaj folder `I:\Apps\trade-journal-main`
