@@ -189,12 +189,13 @@ const css = `
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field.full { grid-column: 1 / -1; }
-  .field label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; }
+  .field label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; }
   .field input, .field textarea, .field select {
     background: var(--bg3); border: 1px solid var(--border2); border-radius: 10px;
-    padding: 10px 12px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 14px;
+    padding: 12px 14px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 16px;
     outline: none; transition: border-color 0.15s; width: 100%;
   }
+  .field input::placeholder, .field textarea::placeholder { color: var(--text3); opacity: 1; font-size: 15px; }
   .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--green); }
   .field textarea { resize: none; min-height: 80px; line-height: 1.5; }
   .field select option { background: var(--bg3); }
