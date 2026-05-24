@@ -31,6 +31,7 @@ const supabase = {
     select: (filter = "") => supabase.query(table, "GET", null, `?select=*${filter}&order=created_at.desc`),
     insert: (data) => supabase.query(table, "POST", data),
     update: (data, filter) => supabase.query(table, "PATCH", data, filter),
+    delete: (filter) => supabase.query(table, "DELETE", null, filter),
   }),
 
   auth: {
@@ -740,21 +741,59 @@ function LogTrade({ userId, onSave, onBack }) {
   const [claudeQ, setClaudeQ] = useState("");
   const [loadingQ, setLoadingQ] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [customStrategies, setCustomStrategies] = useState([]);
+  const [showNewStrat, setShowNewStrat] = useState(false);
+  const [newStrat, setNewStrat] = useState({ name: "", thesis: "", exit_conditions: "" });
+  const [savingStrat, setSavingStrat] = useState(false);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  useEffect(() => {
+    supabase.from("strategies").select(`&user_id=eq.${userId}`)
+      .then(data => setCustomStrategies(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [userId]);
+
   function selectStrategy(key) {
+    if (key === "__new__") {
+      setShowNewStrat(true);
+      return;
+    }
     setStrategy(key);
     setClaudeQ("");
-    if (key && key !== "custom") {
-      setForm(f => ({
-        ...f,
-        thesis: STRATEGIES[key].thesis,
-        exit_conditions: STRATEGIES[key].exit_conditions,
-      }));
+    setShowNewStrat(false);
+    if (key && STRATEGIES[key] && key !== "custom") {
+      setForm(f => ({ ...f, thesis: STRATEGIES[key].thesis, exit_conditions: STRATEGIES[key].exit_conditions }));
     } else if (key === "custom") {
       setForm(f => ({ ...f, thesis: "", exit_conditions: "" }));
+    } else {
+      // custom strategy from Supabase
+      const cs = customStrategies.find(s => s.id === key);
+      if (cs) setForm(f => ({ ...f, thesis: cs.thesis || "", exit_conditions: cs.exit_conditions || "" }));
     }
+  }
+
+  async function saveNewStrategy() {
+    if (!newStrat.name.trim()) return alert("Enter a strategy name.");
+    setSavingStrat(true);
+    try {
+      const data = await supabase.from("strategies").insert({ user_id: userId, name: newStrat.name.trim(), thesis: newStrat.thesis, exit_conditions: newStrat.exit_conditions });
+      const saved = Array.isArray(data) ? data[0] : data;
+      setCustomStrategies(prev => [...prev, saved]);
+      setStrategy(saved.id);
+      setForm(f => ({ ...f, thesis: saved.thesis || "", exit_conditions: saved.exit_conditions || "" }));
+      setNewStrat({ name: "", thesis: "", exit_conditions: "" });
+      setShowNewStrat(false);
+    } catch (e) { alert("Error saving strategy."); }
+    setSavingStrat(false);
+  }
+
+  async function deleteStrategy(id, e) {
+    e.stopPropagation();
+    if (!window.confirm("Delete this strategy?")) return;
+    await supabase.from("strategies").delete(`?id=eq.${id}`);
+    setCustomStrategies(prev => prev.filter(s => s.id !== id));
+    if (strategy === id) { setStrategy(""); setForm(f => ({ ...f, thesis: "", exit_conditions: "" })); }
   }
 
   async function generateQuestion() {
@@ -762,7 +801,7 @@ function LogTrade({ userId, onSave, onBack }) {
     setLoadingQ(true);
     const q = await askClaude(`You are a sharp trading coach. A trader is about to enter this trade:
 Asset: ${form.asset}, Direction: ${form.direction}, Entry: ${form.entry_price}, Target: ${form.target_price}, Stop: ${form.stop_loss}
-Strategy: ${STRATEGIES[strategy]?.label || "Custom"}
+Strategy: ${STRATEGIES[strategy]?.label || customStrategies.find(s => s.id === strategy)?.name || "Custom"}
 Thesis: ${form.thesis}
 Exit conditions: ${form.exit_conditions || "not specified"}
 
@@ -785,7 +824,7 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
         status: "open",
         followed_plan: "open",
         claude_pre_question: claudeQ,
-        strategy: strategy,
+        strategy: STRATEGIES[strategy]?.label || customStrategies.find(s => s.id === strategy)?.name || strategy,
       });
       onSave();
     } catch (e) { console.error("Error saving:", e.message); }
@@ -804,8 +843,48 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
               {Object.entries(STRATEGIES).map(([k, v]) => (
                 <option key={k} value={k}>{v.label}</option>
               ))}
+              {customStrategies.length > 0 && (
+                <optgroup label="My strategies">
+                  {customStrategies.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              <option value="__new__">＋ Add my strategy</option>
             </select>
           </div>
+
+          {/* Forma za novu strategiju */}
+          {showNewStrat && (
+            <div style={{ background: "var(--bg3)", border: "1px solid var(--border2)", borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "var(--green)", letterSpacing: "0.1em", textTransform: "uppercase" }}>New strategy</div>
+              <div className="field full">
+                <label>Name</label>
+                <input placeholder="e.g. London Breakout" value={newStrat.name} onChange={e => setNewStrat(s => ({ ...s, name: e.target.value }))} />
+              </div>
+              <div className="field full">
+                <label>Thesis / Setup description</label>
+                <textarea placeholder="Describe your entry conditions..." value={newStrat.thesis} onChange={e => setNewStrat(s => ({ ...s, thesis: e.target.value }))} />
+              </div>
+              <div className="field full">
+                <label>Exit conditions</label>
+                <textarea placeholder="SL, TP, when to exit early..." value={newStrat.exit_conditions} onChange={e => setNewStrat(s => ({ ...s, exit_conditions: e.target.value }))} />
+              </div>
+              <div className="btn-row">
+                <button className="btn btn-primary" onClick={saveNewStrategy} disabled={savingStrat}>{savingStrat ? "Saving..." : "Save strategy"}</button>
+                <button className="btn btn-secondary" onClick={() => { setShowNewStrat(false); setStrategy(""); }}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Brisanje custom strategije */}
+          {strategy && !STRATEGIES[strategy] && customStrategies.find(s => s.id === strategy) && (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={e => deleteStrategy(strategy, e)} style={{ background: "none", border: "none", color: "var(--red)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+                Delete this strategy
+              </button>
+            </div>
+          )}
           <div className="form-row">
             <div className="field">
               <label>Asset</label>
