@@ -164,7 +164,7 @@ const css = `
   .cta { display: flex; align-items: center; justify-content: center; gap: 10px; width: calc(100% - 32px); margin: 0 16px 20px; padding: 16px; background: var(--green-dim); border: 1px solid var(--green); border-radius: 14px; color: var(--green); font-family: 'Syne', sans-serif; font-weight: 600; font-size: 15px; cursor: pointer; transition: all 0.15s; }
   .cta:hover { background: #00e5a022; }
 
-  .section-label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.12em; text-transform: uppercase; padding: 0 20px; margin-bottom: 10px; }
+  .section-label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; padding: 0 20px; margin-bottom: 10px; }
 
   .trade-list { display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
   .trade-row { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: border-color 0.15s; }
@@ -201,8 +201,8 @@ const css = `
   .field select option { background: var(--bg3); }
 
   .claude-box { background: var(--blue-dim); border: 1px solid #4090ff25; border-radius: 12px; padding: 14px 16px; }
-  .claude-label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--blue); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
-  .claude-text { font-size: 13px; color: #8ab4f8; line-height: 1.6; }
+  .claude-label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--blue); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 8px; }
+  .claude-text { font-size: 15px; color: #8ab4f8; line-height: 1.7; }
 
   .btn { padding: 12px 20px; border-radius: 12px; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.15s; border: none; }
   .btn-primary { background: var(--green); color: #000; }
@@ -214,7 +214,7 @@ const css = `
 
   .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 16px 16px; }
   .review-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
-  .review-card-label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; }
+  .review-card-label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 12px; }
   .stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .stat-name { font-size: 12px; color: var(--text2); }
   .stat-val { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; }
@@ -222,8 +222,8 @@ const css = `
   .bar-fill { height: 4px; border-radius: 2px; transition: width 0.6s ease; }
 
   .detail-field { margin-bottom: 14px; }
-  .detail-label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
-  .detail-value { font-size: 14px; color: var(--text); line-height: 1.5; }
+  .detail-label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px; }
+  .detail-value { font-size: 16px; color: var(--text); line-height: 1.5; }
   .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 
   .loading { display: flex; align-items: center; gap: 8px; color: var(--text2); font-size: 13px; padding: 12px 0; }
