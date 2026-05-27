@@ -379,7 +379,33 @@ function AuthScreen({ onAuth }) {
         <div className="header">
           <div className="logo">TRADE//LOG</div>
         </div>
-        <div style={{ padding: "40px 16px 0" }}>
+        <div style={{ padding: "32px 16px 0" }}>
+
+          {/* Hero — samo na login i signup */}
+          {(mode === "login" || mode === "signup") && (
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 22, fontWeight: 700, color: "var(--text)", lineHeight: 1.3, marginBottom: 12 }}>
+                Stop trading on impulse.<br />Start trading with a plan.
+              </div>
+              <div style={{ fontSize: 15, color: "var(--text2)", lineHeight: 1.7, marginBottom: 24 }}>
+                AI-powered trade journal that challenges your thesis before every entry — so you catch bad trades before they cost you.
+              </div>
+              {[
+                ["⚡", "AI challenges your thesis before you click buy"],
+                ["📋", "Log your plan, review your discipline"],
+                ["📈", "Spot patterns across your trading history"],
+              ].map(([icon, text]) => (
+                <div key={text} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10, fontSize: 14, color: "var(--text2)" }}>
+                  <span style={{ fontSize: 16, lineHeight: 1.4 }}>{icon}</span>
+                  <span>{text}</span>
+                </div>
+              ))}
+              <div style={{ marginTop: 16, fontSize: 13, color: "var(--green)", fontFamily: "'Space Mono', monospace" }}>
+                Free for your first {FREE_LIMIT} trades. No credit card needed.
+              </div>
+            </div>
+          )}
+
           <div className="page-title" style={{ fontSize: 18, marginBottom: 8 }}>
             {mode === "login" ? "Welcome back" : "Create account"}
           </div>
