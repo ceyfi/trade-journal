@@ -952,8 +952,8 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
           <div className="field full">
             <label>Import from screenshot</label>
             <label className={`img-upload-btn ${parsing ? "parsing" : ""}`}>
-              <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageUpload} disabled={parsing} />
-              {parsing ? <><div className="spinner" /> Reading screenshot...</> : <>📷 Upload screenshot — auto-fill fields</>}
+              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={handleImageUpload} disabled={parsing} />
+              {parsing ? <><div className="spinner" /> Reading screenshot...</> : <>📷 Screenshot or camera — auto-fill fields</>}
             </label>
             {imagePreview && <img src={imagePreview} alt="preview" className="img-preview" />}
             {parseMsg && <div style={{ fontSize: 12, color: parseMsg.startsWith("✓") ? "var(--green)" : "var(--text2)", marginTop: 6 }}>{parseMsg}</div>}
