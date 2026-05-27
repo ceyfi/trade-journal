@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 // ─── CONFIGURATION ────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+const FREE_LIMIT = 5; // broj besplatnih trejdova
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Supabase client with auth support
@@ -30,6 +31,7 @@ const supabase = {
     select: (filter = "") => supabase.query(table, "GET", null, `?select=*${filter}&order=created_at.desc`),
     insert: (data) => supabase.query(table, "POST", data),
     update: (data, filter) => supabase.query(table, "PATCH", data, filter),
+    delete: (filter) => supabase.query(table, "DELETE", null, filter),
   }),
 
   auth: {
@@ -59,6 +61,26 @@ const supabase = {
       supabase._token = null;
       localStorage.removeItem("sb_token");
       localStorage.removeItem("sb_user");
+    },
+    async recover(email) {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      return res.json();
+    },
+    async updatePassword(token, newPassword) {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      return res.json();
     },
     getSession() {
       const token = localStorage.getItem("sb_token");
@@ -90,6 +112,51 @@ async function askClaude(prompt) {
   } catch (err) {
     console.error("Claude error:", err);
     return "Could not get feedback.";
+  }
+}
+
+// Claude vision — parse trade from screenshot
+async function parseTradeFromImage(base64Data, mediaType) {
+  try {
+    const res = await fetch("/api/claude", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 500,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: mediaType, data: base64Data },
+            },
+            {
+              type: "text",
+              text: `You are a trading assistant. Extract trade details from this screenshot.
+Return ONLY a valid JSON object with these fields (use empty string if not visible):
+{
+  "asset": "e.g. BTC/USDT or EURUSD",
+  "direction": "Long or Short",
+  "entry_price": "number only",
+  "target_price": "number only",
+  "stop_loss": "number only"
+}
+Do not include any explanation, only the JSON object.`,
+            },
+          ],
+        }],
+      }),
+    });
+    const text = await res.text();
+    const data = JSON.parse(text);
+    const content = data.content?.[0]?.text || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    return JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    console.error("Image parse error:", err);
+    return null;
   }
 }
 
@@ -132,9 +199,9 @@ const css = `
   .card-sm { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
 
   .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 0 16px 16px; }
-  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 16px 14px; }
-  .metric-label { font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; font-family: 'Space Mono', monospace; }
-  .metric-value { font-size: 24px; font-weight: 700; line-height: 1; }
+  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 18px 14px; }
+  .metric-label { font-size: 12px; color: var(--text2); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 10px; font-family: 'Syne', sans-serif; font-weight: 600; }
+  .metric-value { font-size: 28px; font-weight: 700; line-height: 1; font-family: 'Space Mono', monospace; }
   .metric-value.green { color: var(--green); }
   .metric-value.amber { color: var(--amber); }
   .metric-value.neutral { color: var(--text); }
@@ -142,7 +209,7 @@ const css = `
   .cta { display: flex; align-items: center; justify-content: center; gap: 10px; width: calc(100% - 32px); margin: 0 16px 20px; padding: 16px; background: var(--green-dim); border: 1px solid var(--green); border-radius: 14px; color: var(--green); font-family: 'Syne', sans-serif; font-weight: 600; font-size: 15px; cursor: pointer; transition: all 0.15s; }
   .cta:hover { background: #00e5a022; }
 
-  .section-label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.12em; text-transform: uppercase; padding: 0 20px; margin-bottom: 10px; }
+  .section-label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; padding: 0 20px; margin-bottom: 10px; }
 
   .trade-list { display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
   .trade-row { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: border-color 0.15s; }
@@ -167,19 +234,20 @@ const css = `
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field.full { grid-column: 1 / -1; }
-  .field label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; }
+  .field label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; }
   .field input, .field textarea, .field select {
     background: var(--bg3); border: 1px solid var(--border2); border-radius: 10px;
-    padding: 10px 12px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 14px;
+    padding: 12px 14px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 16px;
     outline: none; transition: border-color 0.15s; width: 100%;
   }
+  .field input::placeholder, .field textarea::placeholder { color: var(--text3); opacity: 1; font-size: 15px; }
   .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--green); }
   .field textarea { resize: none; min-height: 80px; line-height: 1.5; }
   .field select option { background: var(--bg3); }
 
   .claude-box { background: var(--blue-dim); border: 1px solid #4090ff25; border-radius: 12px; padding: 14px 16px; }
-  .claude-label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--blue); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
-  .claude-text { font-size: 13px; color: #8ab4f8; line-height: 1.6; }
+  .claude-label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--blue); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 8px; }
+  .claude-text { font-size: 15px; color: #8ab4f8; line-height: 1.7; }
 
   .btn { padding: 12px 20px; border-radius: 12px; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.15s; border: none; }
   .btn-primary { background: var(--green); color: #000; }
@@ -191,7 +259,7 @@ const css = `
 
   .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 16px 16px; }
   .review-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
-  .review-card-label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; }
+  .review-card-label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 12px; }
   .stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .stat-name { font-size: 12px; color: var(--text2); }
   .stat-val { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; }
@@ -199,8 +267,8 @@ const css = `
   .bar-fill { height: 4px; border-radius: 2px; transition: width 0.6s ease; }
 
   .detail-field { margin-bottom: 14px; }
-  .detail-label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
-  .detail-value { font-size: 14px; color: var(--text); line-height: 1.5; }
+  .detail-label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px; }
+  .detail-value { font-size: 16px; color: var(--text); line-height: 1.5; }
   .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 
   .loading { display: flex; align-items: center; gap: 8px; color: var(--text2); font-size: 13px; padding: 12px 0; }
@@ -215,6 +283,11 @@ const css = `
   .page-title { font-size: 22px; font-weight: 700; padding: 0 20px; margin-bottom: 20px; }
 
   .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  .img-upload-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px; background: var(--bg3); border: 1px dashed var(--border2); border-radius: 12px; color: var(--text2); font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .img-upload-btn:hover { border-color: var(--green); color: var(--green); }
+  .img-upload-btn.parsing { border-color: var(--blue); color: var(--blue); }
+  .img-preview { width: 100%; border-radius: 10px; border: 1px solid var(--border); max-height: 160px; object-fit: cover; margin-top: 8px; }
 `;
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -248,7 +321,7 @@ const STRATEGIES = {
 };
 
 // ─── PAYWALL SCREEN ──────────────────────────────────────────────────────────
-function PaywallScreen({ user, onSubscribed }) {
+function PaywallScreen({ user, tradesCount, onSubscribed, onBack }) {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -303,34 +376,69 @@ function PaywallScreen({ user, onSubscribed }) {
       <div className="app">
         <div className="header">
           <div className="logo">TRADE//LOG</div>
-          <button className="tab-btn" onClick={() => { supabase.auth.signOut(); window.location.reload(); }}>Sign out</button>
+          {onBack && <button className="tab-btn" onClick={onBack}>← Back</button>}
         </div>
-        <div style={{ padding: "40px 16px 0", textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>📈</div>
-          <div className="page-title" style={{ textAlign: "center" }}>Start your free trial</div>
-          <p style={{ color: "var(--text2)", fontSize: 14, lineHeight: 1.7, marginBottom: 32, padding: "0 16px" }}>
-            Track your trades, get AI feedback on every entry, and spot patterns in your trading behavior.
-          </p>
-          <div className="card" style={{ margin: "0 0 16px", textAlign: "left" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>Trade Journal Pro</div>
-                <div style={{ color: "var(--text2)", fontSize: 13 }}>Monthly subscription</div>
-              </div>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 22, fontWeight: 700, color: "var(--green)" }}>$5<span style={{ fontSize: 13, color: "var(--text2)" }}>/mo</span></div>
+
+        <div style={{ padding: "32px 16px 0" }}>
+
+          {/* Naslov */}
+          <div style={{ marginBottom: 28, padding: "0 4px" }}>
+            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "var(--text3)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>
+              Upgrade
             </div>
-            {["AI feedback on every trade", "Pre-trade challenge questions", "Pattern analysis across your journal", "Unlimited trade logging"].map(f => (
-              <div key={f} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, fontSize: 13, color: "var(--text2)" }}>
-                <span style={{ color: "var(--green)" }}>✓</span> {f}
+            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 26, fontWeight: 700, color: "var(--text)", lineHeight: 1.25, marginBottom: 10 }}>
+              {tradesCount >= FREE_LIMIT ? <>You've reached<br />the free limit</> : <>Unlock the<br />full journal</>}
+            </div>
+            <div style={{ fontSize: 15, color: "var(--text2)", lineHeight: 1.7 }}>
+              {tradesCount >= FREE_LIMIT
+                ? `You've logged all ${FREE_LIMIT} free trades. Upgrade to Pro to keep going.`
+                : `You're on ${tradesCount} of ${FREE_LIMIT} free trades. Here's what you get when you upgrade.`}
+            </div>
+          </div>
+
+          {/* Kartica s cijenom */}
+          <div className="card" style={{ marginBottom: 12, marginLeft: 0, marginRight: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
+                  TRADE//LOG PRO
+                </div>
+                <div style={{ fontSize: 13, color: "var(--text3)" }}>Monthly subscription</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 28, fontWeight: 700, color: "var(--green)", lineHeight: 1 }}>
+                  $5
+                </div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "var(--text3)" }}>/month</div>
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: "var(--border)", marginBottom: 18 }} />
+
+            {[
+              ["Unlimited trade logging", "Log as many trades as you want"],
+              ["AI feedback on every entry", "Claude analyses each trade before you submit"],
+              ["Pre-trade challenge questions", "Stay disciplined with guided reflection"],
+              ["Pattern analysis", "Spot what's working across your journal"],
+            ].map(([title, desc]) => (
+              <div key={title} style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 13, color: "var(--green)", marginTop: 1, flexShrink: 0 }}>✓</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>{title}</div>
+                  <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5 }}>{desc}</div>
+                </div>
               </div>
             ))}
           </div>
-          <button className="cta" onClick={goToCheckout} disabled={loading} style={{ width: "100%", margin: "0 0 12px" }}>
-            {loading ? "Loading..." : "Subscribe for $5/month →"}
+
+          {/* Dugmad */}
+          <button className="cta" onClick={goToCheckout} disabled={loading} style={{ marginLeft: 0, marginRight: 0, width: "100%", marginBottom: 10 }}>
+            {loading ? "Loading..." : "Upgrade to Pro — $5/month →"}
           </button>
-          <button className="tab-btn" onClick={checkSubscription} disabled={checking} style={{ width: "100%", padding: "10px" }}>
+          <button className="tab-btn" onClick={checkSubscription} disabled={checking} style={{ width: "100%", padding: "12px", fontSize: 13 }}>
             {checking ? "Checking..." : "I already paid — check my subscription"}
           </button>
+
         </div>
       </div>
     </>
@@ -338,26 +446,52 @@ function PaywallScreen({ user, onSubscribed }) {
 }
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
-function AuthScreen({ onAuth }) {
-  const [mode, setMode] = useState("login"); // "login" | "signup"
+function AuthScreen({ onAuth, initialMode }) {
+  const [mode, setMode] = useState(initialMode || "login"); // "login" | "signup" | "forgot" | "reset"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
 
+  function go(m) { setMode(m); setError(""); setMsg(""); }
+
   async function submit() {
+    setError(""); setMsg("");
+    if (mode === "forgot") {
+      if (!email) return setError("Enter your email.");
+      setLoading(true);
+      await supabase.auth.recover(email);
+      setMsg("If that email exists, a reset link has been sent. Check your inbox.");
+      setLoading(false);
+      return;
+    }
+    if (mode === "reset") {
+      if (!password || !password2) return setError("Enter and confirm your new password.");
+      if (password !== password2) return setError("Passwords don't match.");
+      setLoading(true);
+      const token = new URLSearchParams(window.location.hash.slice(1)).get("access_token");
+      const data = await supabase.auth.updatePassword(token, password);
+      if (data.error) {
+        setError(data.error.message || "Reset failed.");
+      } else {
+        setMsg("Password updated! You can now log in.");
+        window.history.replaceState({}, "", "/");
+        go("login");
+      }
+      setLoading(false);
+      return;
+    }
     if (!email || !password) return setError("Enter email and password.");
     setLoading(true);
-    setError("");
-    setMsg("");
     if (mode === "signup") {
       const data = await supabase.auth.signUp(email, password);
       if (data.error) {
         setError(data.error.message || "Signup failed.");
       } else {
         setMsg("Check your email to confirm your account, then log in.");
-        setMode("login");
+        go("login");
       }
     } else {
       const data = await supabase.auth.signIn(email, password);
@@ -372,12 +506,17 @@ function AuthScreen({ onAuth }) {
     setLoading(false);
   }
 
+  const linkBtn = { background: "none", border: "none", color: "var(--green)", cursor: "pointer", fontFamily: "inherit", fontSize: 16 };
+
   return (
     <>
       <style>{css}</style>
       <div className="app">
         <div className="header">
           <div className="logo">TRADE//LOG</div>
+          {(mode === "forgot" || mode === "reset") && (
+            <button className="tab-btn" onClick={() => go("login")}>← Back</button>
+          )}
         </div>
         <div style={{ padding: "32px 16px 0" }}>
 
@@ -407,45 +546,63 @@ function AuthScreen({ onAuth }) {
           )}
 
           <div className="page-title" style={{ fontSize: 18, marginBottom: 8 }}>
-            {mode === "login" ? "Welcome back" : "Create account"}
+            {mode === "login" && "Welcome back"}
+            {mode === "signup" && "Create account"}
+            {mode === "forgot" && "Reset password"}
+            {mode === "reset" && "Set new password"}
           </div>
           <p style={{ color: "var(--text2)", fontSize: 13, marginBottom: 28 }}>
-            {mode === "login" ? "Log in to your journal" : "Start tracking your trades"}
+            {mode === "login" && "Log in to your journal"}
+            {mode === "signup" && "Start tracking your trades"}
+            {mode === "forgot" && "We'll send a reset link to your email"}
+            {mode === "reset" && "Choose a new password for your account"}
           </p>
           <div className="card" style={{ margin: 0 }}>
             <div className="form">
-              <div className="field full">
-                <label>Email</label>
-                <input
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && submit()}
-                />
-              </div>
-              <div className="field full">
-                <label>Password</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && submit()}
-                />
-              </div>
+              {(mode === "login" || mode === "signup" || mode === "forgot") && (
+                <div className="field full">
+                  <label>Email</label>
+                  <input type="email" placeholder="you@example.com" value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()} />
+                </div>
+              )}
+              {(mode === "login" || mode === "signup") && (
+                <div className="field full">
+                  <label>Password</label>
+                  <input type="password" placeholder="••••••••" value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()} />
+                </div>
+              )}
+              {mode === "reset" && (<>
+                <div className="field full">
+                  <label>New password</label>
+                  <input type="password" placeholder="••••••••" value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()} />
+                </div>
+                <div className="field full">
+                  <label>Confirm password</label>
+                  <input type="password" placeholder="••••••••" value={password2}
+                    onChange={e => setPassword2(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()} />
+                </div>
+              </>)}
               {error && <div style={{ color: "var(--red)", fontSize: 13 }}>{error}</div>}
               {msg && <div style={{ color: "var(--green)", fontSize: 13 }}>{msg}</div>}
               <button className="btn btn-primary" style={{ width: "100%" }} onClick={submit} disabled={loading}>
-                {loading ? "Loading..." : mode === "login" ? "Log in" : "Sign up"}
+                {loading ? "Loading..." : mode === "login" ? "Log in" : mode === "signup" ? "Sign up" : mode === "forgot" ? "Send reset link" : "Set new password"}
               </button>
             </div>
           </div>
-          <div style={{ textAlign: "center", marginTop: 20, color: "var(--text2)", fontSize: 13 }}>
-            {mode === "login" ? (
-              <>No account? <button onClick={() => { setMode("signup"); setError(""); }} style={{ background: "none", border: "none", color: "var(--green)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>Sign up</button></>
-            ) : (
-              <>Already have one? <button onClick={() => { setMode("login"); setError(""); }} style={{ background: "none", border: "none", color: "var(--green)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>Log in</button></>
+          <div style={{ textAlign: "center", marginTop: 24, color: "var(--text2)", fontSize: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+            {mode === "login" && (<>
+              <span>No account? <button onClick={() => go("signup")} style={linkBtn}>Sign up</button></span>
+              <span><button onClick={() => go("forgot")} style={{ ...linkBtn, color: "var(--text2)" }}>Forgot password?</button></span>
+            </>)}
+            {mode === "signup" && (
+              <span>Already have one? <button onClick={() => go("login")} style={linkBtn}>Log in</button></span>
             )}
           </div>
         </div>
@@ -459,13 +616,18 @@ export default function TradeJournal() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
-  const [subChecked, setSubChecked] = useState(false);
   const [screen, setScreen] = useState("dashboard");
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
+    // Detektuj password reset link iz emaila (#access_token=...&type=recovery)
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    if (hash.get("type") === "recovery") {
+      setAuthChecked(true);
+      return; // AuthScreen će prikazati reset formu
+    }
     const session = supabase.auth.getSession();
     if (session) setUser(session.user);
     setAuthChecked(true);
@@ -499,7 +661,6 @@ export default function TradeJournal() {
     } catch (e) {
       console.error("Sub check error:", e);
     }
-    setSubChecked(true);
     loadTrades();
   }
 
@@ -524,9 +685,12 @@ export default function TradeJournal() {
   }
 
   if (!authChecked) return null;
-  if (!user) return <AuthScreen onAuth={(u) => setUser(u)} />;
-  if (!subChecked) return null;
-  if (!subscribed) return <PaywallScreen user={user} onSubscribed={() => setSubscribed(true)} />;
+  if (!user) {
+    const isReset = new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
+    return <AuthScreen onAuth={(u) => setUser(u)} initialMode={isReset ? "reset" : "login"} />;
+  }
+
+  const atLimit = !subscribed && trades.length >= FREE_LIMIT;
 
   const closedTrades = trades.filter(t => t.status === "closed");
   const openTrades = trades.filter(t => t.status === "open");
@@ -546,6 +710,15 @@ export default function TradeJournal() {
           <div className="header-actions">
             <button className={`tab-btn ${screen === "dashboard" ? "active" : ""}`} onClick={() => setScreen("dashboard")}>Journal</button>
             <button className={`tab-btn ${screen === "review" ? "active" : ""}`} onClick={() => setScreen("review")}>Review</button>
+            {!subscribed && (
+              <span
+                onClick={() => setScreen("paywall")}
+                title="See what's included in Pro"
+                style={{ fontSize: 12, color: atLimit ? "var(--red, #ff4d4d)" : "var(--text2)", cursor: "pointer", padding: "4px 8px", border: "1px solid currentColor", borderRadius: 4 }}
+              >
+                {trades.length}/{FREE_LIMIT} free
+              </span>
+            )}
             <button className="tab-btn" onClick={handleSignOut} title={user.email}>Sign out</button>
           </div>
         </div>
@@ -554,12 +727,15 @@ export default function TradeJournal() {
           <Dashboard
             trades={trades} openTrades={openTrades} closedTrades={closedTrades}
             adherenceRate={adherenceRate} winRate={winRate} loading={loading}
-            onNew={() => setScreen("log")}
+            onNew={() => atLimit ? setScreen("paywall") : setScreen("log")}
             onSelect={(t) => { setSelected(t); setScreen("detail"); }}
           />
         )}
         {screen === "log" && (
           <LogTrade userId={user.id} onSave={async () => { await loadTrades(); setScreen("dashboard"); }} onBack={() => setScreen("dashboard")} />
+        )}
+        {screen === "paywall" && (
+          <PaywallScreen user={user} tradesCount={trades.length} onSubscribed={() => { setSubscribed(true); setScreen("log"); }} onBack={() => setScreen("dashboard")} />
         )}
         {screen === "detail" && selected && (
           <TradeDetail trade={selected} onBack={() => { setSelected(null); setScreen("dashboard"); }} onClose={async () => { await loadTrades(); setSelected(null); setScreen("dashboard"); }} />
@@ -642,21 +818,92 @@ function LogTrade({ userId, onSave, onBack }) {
   const [claudeQ, setClaudeQ] = useState("");
   const [loadingQ, setLoadingQ] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [customStrategies, setCustomStrategies] = useState([]);
+  const [showNewStrat, setShowNewStrat] = useState(false);
+  const [newStrat, setNewStrat] = useState({ name: "", thesis: "", exit_conditions: "" });
+  const [savingStrat, setSavingStrat] = useState(false);
+  const [parsing, setParsing] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [parseMsg, setParseMsg] = useState("");
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  function selectStrategy(key) {
-    setStrategy(key);
-    setClaudeQ("");
-    if (key && key !== "custom") {
+  async function handleImageUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const mediaType = file.type || "image/jpeg";
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target.result;
+      const base64 = dataUrl.split(",")[1];
+      setImagePreview(dataUrl);
+      setParsing(true);
+      setParseMsg("Reading your screenshot...");
+      const parsed = await parseTradeFromImage(base64, mediaType);
+      setParsing(false);
+      if (!parsed) {
+        setParseMsg("Couldn't read trade data. Fill in manually.");
+        return;
+      }
       setForm(f => ({
         ...f,
-        thesis: STRATEGIES[key].thesis,
-        exit_conditions: STRATEGIES[key].exit_conditions,
+        asset: parsed.asset || f.asset,
+        direction: parsed.direction === "Short" ? "Short" : "Long",
+        entry_price: parsed.entry_price || f.entry_price,
+        target_price: parsed.target_price || f.target_price,
+        stop_loss: parsed.stop_loss || f.stop_loss,
       }));
+      setParseMsg("✓ Fields filled from screenshot — check and adjust if needed.");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  useEffect(() => {
+    supabase.from("strategies").select(`&user_id=eq.${userId}`)
+      .then(data => setCustomStrategies(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [userId]);
+
+  function selectStrategy(key) {
+    if (key === "__new__") {
+      setShowNewStrat(true);
+      return;
+    }
+    setStrategy(key);
+    setClaudeQ("");
+    setShowNewStrat(false);
+    if (key && STRATEGIES[key] && key !== "custom") {
+      setForm(f => ({ ...f, thesis: STRATEGIES[key].thesis, exit_conditions: STRATEGIES[key].exit_conditions }));
     } else if (key === "custom") {
       setForm(f => ({ ...f, thesis: "", exit_conditions: "" }));
+    } else {
+      // custom strategy from Supabase
+      const cs = customStrategies.find(s => s.id === key);
+      if (cs) setForm(f => ({ ...f, thesis: cs.thesis || "", exit_conditions: cs.exit_conditions || "" }));
     }
+  }
+
+  async function saveNewStrategy() {
+    if (!newStrat.name.trim()) return alert("Enter a strategy name.");
+    setSavingStrat(true);
+    try {
+      const data = await supabase.from("strategies").insert({ user_id: userId, name: newStrat.name.trim(), thesis: newStrat.thesis, exit_conditions: newStrat.exit_conditions });
+      const saved = Array.isArray(data) ? data[0] : data;
+      setCustomStrategies(prev => [...prev, saved]);
+      setStrategy(saved.id);
+      setForm(f => ({ ...f, thesis: saved.thesis || "", exit_conditions: saved.exit_conditions || "" }));
+      setNewStrat({ name: "", thesis: "", exit_conditions: "" });
+      setShowNewStrat(false);
+    } catch (e) { alert("Error saving strategy."); }
+    setSavingStrat(false);
+  }
+
+  async function deleteStrategy(id, e) {
+    e.stopPropagation();
+    if (!window.confirm("Delete this strategy?")) return;
+    await supabase.from("strategies").delete(`?id=eq.${id}`);
+    setCustomStrategies(prev => prev.filter(s => s.id !== id));
+    if (strategy === id) { setStrategy(""); setForm(f => ({ ...f, thesis: "", exit_conditions: "" })); }
   }
 
   async function generateQuestion() {
@@ -664,7 +911,7 @@ function LogTrade({ userId, onSave, onBack }) {
     setLoadingQ(true);
     const q = await askClaude(`You are a sharp trading coach. A trader is about to enter this trade:
 Asset: ${form.asset}, Direction: ${form.direction}, Entry: ${form.entry_price}, Target: ${form.target_price}, Stop: ${form.stop_loss}
-Strategy: ${STRATEGIES[strategy]?.label || "Custom"}
+Strategy: ${STRATEGIES[strategy]?.label || customStrategies.find(s => s.id === strategy)?.name || "Custom"}
 Thesis: ${form.thesis}
 Exit conditions: ${form.exit_conditions || "not specified"}
 
@@ -687,7 +934,7 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
         status: "open",
         followed_plan: "open",
         claude_pre_question: claudeQ,
-        strategy: strategy,
+        strategy: STRATEGIES[strategy]?.label || customStrategies.find(s => s.id === strategy)?.name || strategy,
       });
       onSave();
     } catch (e) { console.error("Error saving:", e.message); }
@@ -700,14 +947,67 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
       <div className="page-title">Log trade</div>
       <div className="card">
         <div className="form">
+
+          {/* Screenshot upload */}
+          <div className="field full">
+            <label>Import from screenshot</label>
+            <label className={`img-upload-btn ${parsing ? "parsing" : ""}`}>
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageUpload} disabled={parsing} />
+              {parsing ? <><div className="spinner" /> Reading screenshot...</> : <>📷 Upload screenshot — auto-fill fields</>}
+            </label>
+            {imagePreview && <img src={imagePreview} alt="preview" className="img-preview" />}
+            {parseMsg && <div style={{ fontSize: 12, color: parseMsg.startsWith("✓") ? "var(--green)" : "var(--text2)", marginTop: 6 }}>{parseMsg}</div>}
+          </div>
+          <div className="divider" />
+
           <div className="field full">
             <label>Strategy</label>
             <select value={strategy} onChange={e => selectStrategy(e.target.value)}>
               {Object.entries(STRATEGIES).map(([k, v]) => (
                 <option key={k} value={k}>{v.label}</option>
               ))}
+              {customStrategies.length > 0 && (
+                <optgroup label="My strategies">
+                  {customStrategies.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              <option value="__new__">＋ Add my strategy</option>
             </select>
           </div>
+
+          {/* Forma za novu strategiju */}
+          {showNewStrat && (
+            <div style={{ background: "var(--bg3)", border: "1px solid var(--border2)", borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "var(--green)", letterSpacing: "0.1em", textTransform: "uppercase" }}>New strategy</div>
+              <div className="field full">
+                <label>Name</label>
+                <input placeholder="e.g. London Breakout" value={newStrat.name} onChange={e => setNewStrat(s => ({ ...s, name: e.target.value }))} />
+              </div>
+              <div className="field full">
+                <label>Thesis / Setup description</label>
+                <textarea placeholder="Describe your entry conditions..." value={newStrat.thesis} onChange={e => setNewStrat(s => ({ ...s, thesis: e.target.value }))} />
+              </div>
+              <div className="field full">
+                <label>Exit conditions</label>
+                <textarea placeholder="SL, TP, when to exit early..." value={newStrat.exit_conditions} onChange={e => setNewStrat(s => ({ ...s, exit_conditions: e.target.value }))} />
+              </div>
+              <div className="btn-row">
+                <button className="btn btn-primary" onClick={saveNewStrategy} disabled={savingStrat}>{savingStrat ? "Saving..." : "Save strategy"}</button>
+                <button className="btn btn-secondary" onClick={() => { setShowNewStrat(false); setStrategy(""); }}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Brisanje custom strategije */}
+          {strategy && !STRATEGIES[strategy] && customStrategies.find(s => s.id === strategy) && (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={e => deleteStrategy(strategy, e)} style={{ background: "none", border: "none", color: "var(--red)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+                Delete this strategy
+              </button>
+            </div>
+          )}
           <div className="form-row">
             <div className="field">
               <label>Asset</label>
