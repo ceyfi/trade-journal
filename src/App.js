@@ -1043,7 +1043,7 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
           </div>
           <div className="field full">
             <label>Thesis</label>
-            <textarea value={form.thesis} onChange={e => set("thesis", e.target.value)} onBlur={generateQuestion} placeholder="Describe your setup..." />
+            <textarea value={form.thesis} onChange={e => { set("thesis", e.target.value); setClaudeQ(""); }} placeholder="Describe your setup..." />
           </div>
           <div className="field full">
             <label>Exit conditions</label>
@@ -1051,12 +1051,24 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
           </div>
         </div>
 
-        {(loadingQ || claudeQ) && (
+        <button
+          className={`img-upload-btn ${loadingQ ? "parsing" : ""}`}
+          style={{ margin: "0 0 4px" }}
+          onClick={generateQuestion}
+          disabled={loadingQ || !form.thesis}
+        >
+          {loadingQ
+            ? <><div className="spinner" /> Claude is thinking...</>
+            : claudeQ
+            ? <>🔄 Ask Claude again</>
+            : <>⚡ Challenge my thesis with Claude</>}
+        </button>
+
+        {claudeQ && (
           <>
-            <div className="divider" />
-            <div className="claude-box">
+            <div className="claude-box" style={{ marginBottom: 8 }}>
               <div className="claude-label">Claude asks</div>
-              {loadingQ ? <div className="loading"><div className="spinner" /> Thinking...</div> : <div className="claude-text">{claudeQ}</div>}
+              <div className="claude-text">{claudeQ}</div>
             </div>
           </>
         )}
