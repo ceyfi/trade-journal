@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 // ─── CONFIGURATION ────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
-const FREE_LIMIT = 5; // broj besplatnih trejdova
+const TRIAL_DAYS = 10; // broj dana besplatnog triala
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Supabase client with auth support
@@ -321,7 +321,7 @@ const STRATEGIES = {
 };
 
 // ─── PAYWALL SCREEN ──────────────────────────────────────────────────────────
-function PaywallScreen({ user, tradesCount, onSubscribed, onBack }) {
+function PaywallScreen({ user, atLimit, onSubscribed, onBack }) {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -387,12 +387,12 @@ function PaywallScreen({ user, tradesCount, onSubscribed, onBack }) {
               Upgrade
             </div>
             <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 26, fontWeight: 700, color: "var(--text)", lineHeight: 1.25, marginBottom: 10 }}>
-              {tradesCount >= FREE_LIMIT ? <>You've reached<br />the free limit</> : <>Unlock the<br />full journal</>}
+              {atLimit ? <>Your free trial<br />has ended</> : <>Unlock the<br />full journal</>}
             </div>
             <div style={{ fontSize: 15, color: "var(--text2)", lineHeight: 1.7 }}>
-              {tradesCount >= FREE_LIMIT
-                ? `You've logged all ${FREE_LIMIT} free trades. Upgrade to Pro to keep going.`
-                : `You're on ${tradesCount} of ${FREE_LIMIT} free trades. Here's what you get when you upgrade.`}
+              {atLimit
+                ? "Your 10-day free trial is over. Upgrade to Pro to keep logging trades and getting AI feedback."
+                : "Here's everything you get with Trade Journal Pro."}
             </div>
           </div>
 
@@ -540,7 +540,7 @@ function AuthScreen({ onAuth, initialMode }) {
                 </div>
               ))}
               <div style={{ marginTop: 16, fontSize: 13, color: "var(--green)", fontFamily: "'Space Mono', monospace" }}>
-                Free for your first {FREE_LIMIT} trades. No credit card needed.
+                Free for {TRIAL_DAYS} days. No credit card needed.
               </div>
             </div>
           )}
@@ -616,6 +616,7 @@ export default function TradeJournal() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
+  const [trialDaysLeft, setTrialDaysLeft] = useState(null);
   const [screen, setScreen] = useState("dashboard");
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -640,24 +641,31 @@ export default function TradeJournal() {
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function checkSubscription() {
-    // Check if returned from Lemon Squeezy with ?subscribed=true
     const params = new URLSearchParams(window.location.search);
     if (params.get("subscribed") === "true") {
       window.history.replaceState({}, "", "/");
     }
     try {
       const token = localStorage.getItem("sb_token");
+
+      // Provjeri subscription status
       const res = await fetch(
         `${process.env.REACT_APP_SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=subscription_status`,
-        {
-          headers: {
-            apikey: process.env.REACT_APP_SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers: { apikey: process.env.REACT_APP_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
-      setSubscribed(data?.[0]?.subscription_status === "active");
+      const isPaid = data?.[0]?.subscription_status === "active";
+      setSubscribed(isPaid);
+
+      // Dohvati datum registracije
+      const userRes = await fetch(`${process.env.REACT_APP_SUPABASE_URL}/auth/v1/user`, {
+        headers: { apikey: process.env.REACT_APP_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
+      });
+      const userData = await userRes.json();
+      const createdAt = new Date(userData.created_at);
+      const daysSince = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      const daysLeft = Math.max(0, Math.ceil(TRIAL_DAYS - daysSince));
+      setTrialDaysLeft(daysLeft);
     } catch (e) {
       console.error("Sub check error:", e);
     }
@@ -690,7 +698,8 @@ export default function TradeJournal() {
     return <AuthScreen onAuth={(u) => setUser(u)} initialMode={isReset ? "reset" : "login"} />;
   }
 
-  const atLimit = !subscribed && trades.length >= FREE_LIMIT;
+  const inTrial = trialDaysLeft === null || trialDaysLeft > 0;
+  const atLimit = !subscribed && !inTrial;
 
   const closedTrades = trades.filter(t => t.status === "closed");
   const openTrades = trades.filter(t => t.status === "open");
@@ -716,7 +725,7 @@ export default function TradeJournal() {
                 title="See what's included in Pro"
                 style={{ fontSize: 12, color: atLimit ? "var(--red, #ff4d4d)" : "var(--text2)", cursor: "pointer", padding: "4px 8px", border: "1px solid currentColor", borderRadius: 4 }}
               >
-                {trades.length}/{FREE_LIMIT} free
+                {atLimit ? "Trial ended" : trialDaysLeft === 1 ? "1 day left" : `${trialDaysLeft ?? "..."} days left`}
               </span>
             )}
             <button className="tab-btn" onClick={handleSignOut} title={user.email}>Sign out</button>
@@ -735,7 +744,7 @@ export default function TradeJournal() {
           <LogTrade userId={user.id} onSave={async () => { await loadTrades(); setScreen("dashboard"); }} onBack={() => setScreen("dashboard")} />
         )}
         {screen === "paywall" && (
-          <PaywallScreen user={user} tradesCount={trades.length} onSubscribed={() => { setSubscribed(true); setScreen("log"); }} onBack={() => setScreen("dashboard")} />
+          <PaywallScreen user={user} atLimit={atLimit} onSubscribed={() => { setSubscribed(true); setScreen("log"); }} onBack={() => setScreen("dashboard")} />
         )}
         {screen === "detail" && selected && (
           <TradeDetail trade={selected} onBack={() => { setSelected(null); setScreen("dashboard"); }} onClose={async () => { await loadTrades(); setSelected(null); setScreen("dashboard"); }} />
