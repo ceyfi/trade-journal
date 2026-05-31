@@ -298,20 +298,20 @@ const planLabel = (v) => v === "yes" ? "Followed" : v === "no" ? "Deviated" : v 
 // ─── STRATEGIES ──────────────────────────────────────────────────────────────
 const STRATEGIES = {
   "": { label: "— Select strategy —", thesis: "", exit_conditions: "" },
-  "us_daily_open": {
-    label: "US Daily Open",
-    thesis: "BTC US Daily Open setup. Watching 5min chart at 15:30, 15:35, 15:40 candles. 2 green candles closing up → long on US open high. 2 red candles closing down → short on US open low.",
-    exit_conditions: "Long: SL on US open low. Short: SL on US open high. Exit at 1:2 R/R or if setup invalidated within first 15min.",
+  "trend_following": {
+    label: "Trend Following",
+    thesis: "Asset is in a clear uptrend/downtrend on [timeframe]. Price has pulled back to [EMA/level] and showing signs of continuation. Entering in the direction of the trend.",
+    exit_conditions: "SL below the last swing low (long) or above the last swing high (short). Target next major resistance/support or trail stop as trend continues. Exit if price closes against the trend structure.",
   },
-  "asian_range": {
-    label: "Asian Range Breakout",
-    thesis: "Asian session range identified (02:00–06:00 UTC). Waiting for breakout when London opens. Enter on confirmed close above/below range with volume confirmation.",
-    exit_conditions: "SL just inside the Asian range. Target 1.5–2x the range size. Exit if price returns inside range after breakout.",
+  "swing_trade": {
+    label: "Swing Trade",
+    thesis: "Identified a multi-day setup on [asset]. [Catalyst/pattern] forming on the [daily/4H] chart. Expecting a move over the next [X] days as [reason].",
+    exit_conditions: "SL beyond the key level that invalidates the setup. Target based on next S/R or measured move. Will reassess if fundamental picture changes.",
   },
-  "htf_sr": {
-    label: "Higher Timeframe S/R",
-    thesis: "Key support/resistance level identified on daily or 4H chart. Price has reached the level. Waiting for confirmation candle (engulfing or pin bar) before entry.",
-    exit_conditions: "SL just beyond the S/R level. Target next major S/R. Exit if price breaks and closes beyond level without bouncing.",
+  "breakout": {
+    label: "Breakout",
+    thesis: "Price has been consolidating near [level] for [X] periods. Volume building. Expecting a confirmed breakout above/below [level] with momentum continuation.",
+    exit_conditions: "SL just inside the consolidation range — if price returns inside, setup is invalid. Target 1.5–2x the range size. Exit immediately on failed breakout (close back inside range).",
   },
   "custom": {
     label: "Custom setup",
