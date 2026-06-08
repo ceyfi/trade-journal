@@ -97,9 +97,13 @@ const supabase = {
 // Claude AI call — goes through Vercel API route
 async function askClaude(prompt) {
   try {
+    const token = localStorage.getItem("sb_token") || "";
     const res = await fetch("/api/claude", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
         max_tokens: 1000,
@@ -118,9 +122,13 @@ async function askClaude(prompt) {
 // Claude vision — parse trade from screenshot
 async function parseTradeFromImage(base64Data, mediaType) {
   try {
+    const token = localStorage.getItem("sb_token") || "";
     const res = await fetch("/api/claude", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
         max_tokens: 500,
@@ -672,10 +680,6 @@ export default function TradeJournal() {
     loadTrades();
   }
 
-  useEffect(() => {
-    if (user) loadTrades();
-  }, [user]);
-
   async function loadTrades() {
     try {
       setLoading(true);
@@ -1137,11 +1141,12 @@ Give feedback on what they did well or poorly, and one actionable takeaway.`);
         status: "closed",
         claude_feedback: feedback,
       }, `?id=eq.${trade.id}`);
-    } catch (e) {
-      console.error("Save error:", e.message);
-    } finally {
       setSaving(false);
       onClose();
+    } catch (e) {
+      console.error("Save error:", e.message);
+      alert("Error saving trade. Please try again.");
+      setSaving(false);
     }
   }
 

@@ -14,16 +14,19 @@ async function getRawBody(req) {
 }
 
 async function updateSupabase(userId, status, customerId, subscriptionId) {
-  const url = `${process.env.REACT_APP_SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`;
+  // UPSERT — kreira red ako ne postoji, ažurira ako postoji
+  // Novi korisnici nemaju profiles red sve dok ne pretplate, pa PATCH ne bi radio
+  const url = `${process.env.REACT_APP_SUPABASE_URL}/rest/v1/profiles`;
   const res = await fetch(url, {
-    method: "PATCH",
+    method: "POST",
     headers: {
-      apikey: process.env.REACT_APP_SUPABASE_ANON_KEY,
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
-      Prefer: "return=minimal",
+      Prefer: "resolution=merge-duplicates,return=minimal",
     },
     body: JSON.stringify({
+      id: userId,
       subscription_status: status,
       lemon_customer_id: customerId,
       lemon_subscription_id: subscriptionId,
@@ -31,7 +34,7 @@ async function updateSupabase(userId, status, customerId, subscriptionId) {
   });
   if (!res.ok) {
     const text = await res.text();
-    console.error("Supabase update error:", text);
+    console.error("Supabase upsert error:", text);
   }
 }
 

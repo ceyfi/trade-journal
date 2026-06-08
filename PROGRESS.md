@@ -25,20 +25,27 @@
 
 ### Plaćanje (LemonSqueezy)
 - `/api/lemon-checkout` — kreira checkout sesiju
-- `/api/lemon-webhook` — prima webhookove, ažurira Supabase `profiles` tabelu
+- `/api/lemon-webhook` — prima webhookove, UPSERT u Supabase `profiles` tabelu
 - Polja u profiles: `subscription_status`, `lemon_customer_id`, `lemon_subscription_id`
 - Webhook obrađuje: `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_expired`
 
-### Freemium model
-- Prvih 5 trejdova besplatno, od 6. paywall
-- Counter u headeru: "X/5 free" (postaje crven na limitu, uvijek klikabilan)
-- `FREE_LIMIT = 5` konstanta na vrhu App.js — lako promijeniti
-- Klik na counter pokazuje paywall sa različitim tekstom zavisno jesi li na limitu ili ne
-- PaywallScreen redesajniran da prati dizajn sistem app-a
+### Trial model
+- 10 dana besplatno od registracije (`TRIAL_DAYS = 10` u App.js)
+- Counter u headeru: "X days left" / "Trial ended"
+- Nakon 10 dana → PaywallScreen
 
 ### Sigurnost
 - `.env` uklonjen iz git trackinga, dodan u `.gitignore`
 - Anthropic API ključ rotiran (novi ključ postavljen lokalno i na Vercelu)
+- `/api/claude` zaštićen — Supabase JWT provjera (neautorizovani zahtjevi dobiju 401)
+- `askClaude()` i `parseTradeFromImage()` šalju Bearer token u svakom zahtjevu
+
+### Bug fixes (sesija 3)
+- **Webhook UPSERT** — `lemon-webhook.js` sada radi UPSERT umjesto PATCH, kreira `profiles` red za nove korisnike koji nemaju postojeći red
+- **`closeTrade` finally bug** — `onClose()` se više ne poziva ako Supabase save ne uspije; korisnik dobije grešku umjesto tihog gubitka podataka
+- **Dupli `loadTrades`** — uklonjen redundantni `useEffect` koji je pozivao `loadTrades()` pri promjeni `user`, pošto `checkSubscription()` to već radi
+- **server.js TLS** — uklonjen `NODE_TLS_REJECT_UNAUTHORIZED = '0'`
+- **Backup fajlovi** — `src/App - Copy.js` i `src/App - Copy (2).js` obrisani
 
 ### UI poboljšanja
 - Dashboard metric labele: veće (12px), čitljivija boja, Syne font — vrijednosti u Space Mono
@@ -47,40 +54,37 @@
 - PaywallScreen: potpuno redesajniran
 - Auth ekran: hero sekcija iznad login/signup forme
 
-### Hero sekcija na login/signup (zadnje urađeno)
-- Naslov: "Stop trading on impulse. Start trading with a plan."
-- Kratki opis + 3 bullet featura
-- "Free for your first 5 trades. No credit card needed."
-- Prikazuje se samo na login i signup — forgot/reset ostaju čisti
-
 ---
 
 ## Poznate napomene
-- LemonSqueezy trial period nije konfigurisan (za sada freemium, bez triala)
-- `subscription_status = 'on_trial'` nije obrađen u webhook handleru (ne potrebno sada)
+- Token expiry nije riješen — JWT ističe za 1h, nema refresh logike. Korisnik mora da se odjavi/prijavi. (Pravi fix: migracija na `@supabase/supabase-js`)
+- Nema profile reda za nove korisnike dok se ne pretplate (webhook sada radi UPSERT pa je ovo OK)
 - Email reset lozinke dolazi od Supabase adrese — kad bude zvanično, podesiti custom SMTP
   → Supabase → Project Settings → Authentication → SMTP Settings (preporučen Resend.com)
-- Ručno postavljanje pretplate u Supabase:
-  `UPDATE profiles SET subscription_status = 'active' WHERE id = 'uuid';`
-- `src/App - Copy.js` stari backup fajl — može se obrisati
+- Ručno aktiviranje pretplate za alfa testere:
+  ```sql
+  UPDATE profiles SET subscription_status = 'active' WHERE id = 'uuid';
+  -- ili po emailu:
+  SELECT id FROM auth.users WHERE email = 'korisnik@email.com';
+  ```
 
 ---
 
 ## Distribucija / marketing status
-- Reddit r/Daytrading: post uklonjen, Software Sunday jedina opcija (nedjelja, flair)
-- Twitter: postoji crypto/trading nalog, plan je koristiti ga
-  - Promijeniti bio u: "trader | building tools for discipline | link u profilu"
-  - Staviti link app-a u profil
-  - Početi postovati: trade breakdowni, AI feedback screenshoti, psychology
-  - Ne stavljati link u prvi tweet, čekati da neko pita
+- Reddit r/Daytrading: Software Sunday jedina opcija (nedjelja, flair obavezan)
+- Post je bio živ, 493 viewova, komentari bez negativnih reakcija
+- Twitter: postoji crypto/trading nalog (@ficeyftw)
+  - Plan: bio → "trader | building tools for discipline", link u profilu
+  - Content: trade breakdowni, AI feedback screenshoti, psychology
 
 ---
 
 ## Sljedeće (prioritet redom)
 - [ ] **Poboljšati unos trejda** — Marko ima konkretne napomene, pitati na početku sesije
-- [ ] Twitter bio + prvi tweet (van app-a, Markov zadatak)
+- [ ] Token refresh / migracija na `@supabase/supabase-js`
 - [ ] Review ekran — provjeriti fontove i UX
-- [ ] Poboljšati onboarding
+- [ ] Twitter bio + prvi tweet (van app-a, Markov zadatak)
+- [ ] Naći prvih 10 alfa testera
 
 ---
 
