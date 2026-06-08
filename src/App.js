@@ -168,6 +168,49 @@ Do not include any explanation, only the JSON object.`,
   }
 }
 
+// Claude text — parse trade from pasted text
+async function parseTradeFromText(pastedText) {
+  try {
+    const token = localStorage.getItem("sb_token") || "";
+    const res = await fetch("/api/claude", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 300,
+        messages: [{
+          role: "user",
+          content: `You are a trading assistant. Extract trade details from this text.
+Return ONLY a valid JSON object with these fields (use empty string if not found):
+{
+  "asset": "e.g. BTC/USDT or EURUSD or SPY",
+  "direction": "Long or Short",
+  "entry_price": "number only",
+  "target_price": "number only",
+  "stop_loss": "number only",
+  "position_size": "number only"
+}
+Do not include any explanation, only the JSON object.
+
+Text: ${pastedText}`,
+        }],
+      }),
+    });
+    const text = await res.text();
+    const data = JSON.parse(text);
+    const content = data.content?.[0]?.text || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    return JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    console.error("Text parse error:", err);
+    return null;
+  }
+}
+
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;500;600;700&display=swap');
@@ -838,6 +881,9 @@ function LogTrade({ userId, onSave, onBack }) {
   const [parsing, setParsing] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const [parseMsg, setParseMsg] = useState("");
+  const [pasteText, setPasteText] = useState("");
+  const [showPaste, setShowPaste] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -869,6 +915,33 @@ function LogTrade({ userId, onSave, onBack }) {
       setParseMsg("✓ Fields filled from screenshot — check and adjust if needed.");
     };
     reader.readAsDataURL(file);
+  }
+
+  async function handlePasteParse() {
+    if (!pasteText.trim()) return;
+    setParsing(true);
+    setParseMsg("Reading your text...");
+    const parsed = await parseTradeFromText(pasteText);
+    setParsing(false);
+    if (!parsed) {
+      setParseMsg("Couldn't read trade data. Fill in manually.");
+      return;
+    }
+    setForm(f => ({
+      ...f,
+      asset: parsed.asset || f.asset,
+      direction: parsed.direction === "Short" ? "Short" : "Long",
+      entry_price: parsed.entry_price || f.entry_price,
+      target_price: parsed.target_price || f.target_price,
+      stop_loss: parsed.stop_loss || f.stop_loss,
+      position_size: parsed.position_size || f.position_size,
+    }));
+    setParseMsg("✓ Fields filled — check and adjust if needed.");
+    setPasteText("");
+    setShowPaste(false);
+    if (parsed.target_price || parsed.stop_loss || parsed.position_size) {
+      setShowAdvanced(true);
+    }
   }
 
   useEffect(() => {
@@ -961,18 +1034,52 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
       <div className="card">
         <div className="form">
 
-          {/* Screenshot upload */}
+          {/* Import sekcija — screenshot ili paste */}
           <div className="field full">
-            <label>Import from screenshot</label>
-            <label className={`img-upload-btn ${parsing ? "parsing" : ""}`}>
-              <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageUpload} disabled={parsing} />
-              {parsing ? <><div className="spinner" /> Reading screenshot...</> : <>📷 Screenshot or camera — auto-fill fields</>}
-            </label>
+            <label>Auto-fill from</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <label className={`img-upload-btn ${parsing ? "parsing" : ""}`} style={{ flex: 1 }}>
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageUpload} disabled={parsing} />
+                {parsing ? <><div className="spinner" /> Reading...</> : <>📷 Screenshot</>}
+              </label>
+              <button
+                type="button"
+                className={`img-upload-btn ${showPaste ? "parsing" : ""}`}
+                style={{ flex: 1 }}
+                onClick={() => { setShowPaste(p => !p); setParseMsg(""); }}
+                disabled={parsing}
+              >
+                📋 Paste text
+              </button>
+            </div>
+
+            {/* Paste polje */}
+            {showPaste && (
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                <textarea
+                  style={{ background: "var(--bg3)", border: "1px solid var(--border2)", borderRadius: 10, padding: "10px 14px", color: "var(--text)", fontFamily: "'Syne', sans-serif", fontSize: 14, minHeight: 72, resize: "none", outline: "none", width: "100%" }}
+                  placeholder={"Paste trade details, broker confirmation, or just type:\ne.g. BTC long 62400 tp 65000 sl 61000 size 500"}
+                  value={pasteText}
+                  onChange={e => setPasteText(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handlePasteParse(); }}
+                />
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: 13, padding: "8px 14px" }}
+                  onClick={handlePasteParse}
+                  disabled={parsing || !pasteText.trim()}
+                >
+                  {parsing ? <><div className="spinner" style={{ display: "inline-block" }} /> Reading...</> : "Fill fields →"}
+                </button>
+              </div>
+            )}
+
             {imagePreview && <img src={imagePreview} alt="preview" className="img-preview" />}
             {parseMsg && <div style={{ fontSize: 12, color: parseMsg.startsWith("✓") ? "var(--green)" : "var(--text2)", marginTop: 6 }}>{parseMsg}</div>}
           </div>
           <div className="divider" />
 
+          {/* Strategija */}
           <div className="field full">
             <label>Strategy</label>
             <select value={strategy} onChange={e => selectStrategy(e.target.value)}>
@@ -1021,6 +1128,8 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
               </button>
             </div>
           )}
+
+          {/* Obavezna polja */}
           <div className="form-row">
             <div className="field">
               <label>Asset</label>
@@ -1034,34 +1143,47 @@ Ask ONE sharp, specific question that challenges their reasoning or exposes a ga
               </select>
             </div>
           </div>
-          <div className="form-row">
-            <div className="field">
-              <label>Entry price</label>
-              <input placeholder="62400" value={form.entry_price} onChange={e => set("entry_price", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Target price</label>
-              <input placeholder="65000" value={form.target_price} onChange={e => set("target_price", e.target.value)} />
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="field">
-              <label>Stop loss</label>
-              <input placeholder="61000" value={form.stop_loss} onChange={e => set("stop_loss", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Position size ($)</label>
-              <input placeholder="500" value={form.position_size} onChange={e => set("position_size", e.target.value)} />
-            </div>
+          <div className="field full">
+            <label>Entry price</label>
+            <input placeholder="62400" value={form.entry_price} onChange={e => set("entry_price", e.target.value)} />
           </div>
           <div className="field full">
             <label>Thesis</label>
-            <textarea value={form.thesis} onChange={e => { set("thesis", e.target.value); setClaudeQ(""); }} placeholder="Describe your setup..." />
+            <textarea value={form.thesis} onChange={e => { set("thesis", e.target.value); setClaudeQ(""); }} placeholder="Why are you entering this trade?" />
           </div>
-          <div className="field full">
-            <label>Exit conditions</label>
-            <textarea value={form.exit_conditions} onChange={e => set("exit_conditions", e.target.value)} style={{ minHeight: 60 }} placeholder="When will you exit?" />
-          </div>
+
+          {/* Advanced toggle */}
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(a => !a)}
+            style={{ background: "none", border: "none", color: "var(--text2)", fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "4px 0", textAlign: "left", display: "flex", alignItems: "center", gap: 6 }}
+          >
+            <span style={{ fontSize: 11, transition: "transform 0.2s", display: "inline-block", transform: showAdvanced ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
+            {showAdvanced ? "Hide details" : "Add target, SL, position size…"}
+          </button>
+
+          {showAdvanced && (
+            <>
+              <div className="form-row">
+                <div className="field">
+                  <label>Target price</label>
+                  <input placeholder="65000" value={form.target_price} onChange={e => set("target_price", e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Stop loss</label>
+                  <input placeholder="61000" value={form.stop_loss} onChange={e => set("stop_loss", e.target.value)} />
+                </div>
+              </div>
+              <div className="field full">
+                <label>Position size ($)</label>
+                <input placeholder="500" value={form.position_size} onChange={e => set("position_size", e.target.value)} />
+              </div>
+              <div className="field full">
+                <label>Exit conditions</label>
+                <textarea value={form.exit_conditions} onChange={e => set("exit_conditions", e.target.value)} style={{ minHeight: 60 }} placeholder="When will you exit?" />
+              </div>
+            </>
+          )}
         </div>
 
         <button
